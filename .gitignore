@@ -1,0 +1,39 @@
+# Python & Virtual Environments
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# IDEs & System files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary Office lock files
+~$*.xlsx
+~$*.pptx
+~$*.docx
+
+# Output & Execution Artifacts
+*.log
+*.tmp
+output/
+Output/
+temp/
+tmp/
+.stage-*/
+_build_*/
+*.zip
+scratch/
+*.bak
+*.pre_test_bak
+Sample_Workbook_Raw_Data.xlsx
+
+# Secrets & Credentials
+*.env
+*.key
+*.pem

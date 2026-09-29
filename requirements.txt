@@ -1,0 +1,11 @@
+# Requirements for Quality Intelligence Suite & Re-Inspection Dashboard
+# Core Data Processing
+pandas>=2.0.0
+openpyxl>=3.1.2
+xlrd>=2.0.1
+xlsxwriter>=3.1.0
+
+# Office, XML & Media Processing
+python-pptx>=1.0.0
+pillow>=10.0.0
+lxml>=4.9.0
