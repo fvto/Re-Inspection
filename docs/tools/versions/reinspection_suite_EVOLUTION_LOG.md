@@ -13,6 +13,7 @@ When changes occur in upstream standalone code, templates, or business rules, th
 - **Extraction Date**: `2026-09-29`
 - **Repository Branch**: `master`
 - **Operating Environment**: Windows 10/11 x64, Python 3.10-3.13 (x64)
+- **Baseline Commit SHA**: `55008a12ec59fa44c68438d3405ca971132c5b63`
 - **Baseline Commit Reference**: Staged via Conventional Commits (`feat(core)`, `feat(templates)`, `feat(agents)`, `docs(integrate)`) and tagged at `v1.0.0`.
 
 ### 2.1 Cryptographic Fingerprint Manifest (Baseline)
