@@ -55,12 +55,54 @@ When changes occur in upstream standalone code, templates, or business rules, th
 
 ---
 
-## 3. Protocol for Future Delta Updates
+## 4. Version 1.1.0 Delta Record — Visual Automation & Dynamic Titles
+
+- **Version Tag**: `v1.1.0`
+- **Release Name**: `Release v1.1.0: Add dynamic presentation titles, date cover badge, pptx annotator, assets and latest monthly datasets`
+- **Extraction Date**: `2026-10-06`
+- **Repository Branch**: `main`
+- **Operating Environment**: Windows 10/11 x64, Python 3.10-3.13 (x64)
+- **Delta Commit SHA**: `b0eea0e`
+- **Previous Baseline Tag**: `v1.0.0` (`55008a1`)
+
+### 4.1 Delta Modifications & Enhancements
+
+1. **Dynamic Presentation Header & Cover Date**:
+   - `pptx_generator.py`: Introduced `_update_slide_header_title` to dynamically update presentation slide titles across all slides based on `title_format` (default: `Re-Inspection Report_{month_label}`).
+   - `pptx_generator.py`: Introduced `_update_cover_slide` to format and inject dynamic date badges on Slide 1 cover (`Date: <Month> <Year>`).
+   - `reinspection_suite.py`: Extended `generate_presentation_report` and `generate_all_reports` to accept and propagate `title_format`.
+
+2. **Automated Visual Inspection Annotator (`pptx_annotator.py`)**:
+   - Automated generation of bounding frames, connector lines with oval terminal points, and insight callouts with megaphone icon.
+   - Enforced standard quality thresholds:
+     - **QC Threshold**: $\ge 10\%$ ratio of Re-Inspection vs. FTT defect count.
+     - **MA Threshold**: $\ge 30\%$ ratio of Re-Inspection vs. HFPA defect count.
+     - **Defect Mapping Rule**: Strict one-to-one mapping (`Defect A -> Defect A`) preserving color identity.
+     - **Zero Overlap Layout**: Connectors span inter-column gaps without obscuring numeric data labels.
+
+3. **Graphic Assets & Palette Updates**:
+   - Added `assets/megaphone.png` for executive presentation insight boxes.
+   - Updated `Color_Template.xlsx` with recent monthly defect color definitions.
+
+### 4.2 Cryptographic Fingerprint Manifest (Delta v1.1.0)
+
+| File Path | Role | Size (Bytes) | SHA-256 Checksum |
+|---|---|---|---|
+| `pptx_generator.py` | OpenXML Presentation Exporter (Dynamic Titles) | 53,136 | `446933dfd920e543b5e4070a96f1ec2d01ea313010b9576c62c2f4fc911b3337` |
+| `reinspection_suite.py` | Core Analytical Engine & Pipeline | 95,242 | `3464ac86ca982fa18151f15aa879a97d7ee4d84f2b0bbff99596b6fb5434d708` |
+| `pptx_annotator.py` | Visual Inspection Overlays & Insights Engine | 10,931 | `8727a897a13a7c6b579fb647f2ef8c72877a561dc1ba96739678147d341b52a4` |
+| `Color_Template.xlsx` | Defect Color Palette Master (Updated) | 12,296 | `601a4d25bebde8c83a1ea4489bf16c7cb5f448eaad1d6540d9990833919cbbd8` |
+| `assets/megaphone.png` | Icon Asset for PowerPoint Callout Shapes | 11,252 | `4c50deee82deae811b7d5ee8210334ccae3053805ae6522c7a6a43b9d0b04618` |
+
+---
+
+## 5. Protocol for Future Delta Updates
 When future revisions to code, templates, or business rules are committed to the upstream repository:
 1. Ensure new changes are committed to Git with Conventional Commits (`feat(...)`, `fix(...)`, etc.).
-2. Execute the companion master prompt: `docs/tools/extract-prompt/MCP_TOOL_DELTA_EXTRACTOR.md`.
+2. Execute the companion master prompt: `MCP_TOOL_DELTA_EXTRACTOR.md`.
 3. The delta extractor will:
-   - Compare `v1.0.0` (or latest ledger tag) against `HEAD` via `git diff`.
+   - Compare `v1.1.0` (or latest ledger tag) against `HEAD` via `git diff`.
    - Identify added/modified functions, template sheet layouts, and defect definitions.
-   - Append an entry to this ledger (e.g., Section 4: Version 1.1.0 Delta Record).
+   - Append an entry to this ledger.
    - Produce a delta migration patch for target MCP implementations.
+
