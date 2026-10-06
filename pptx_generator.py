@@ -13,6 +13,7 @@ import io
 import re
 import math
 import copy
+import datetime
 import colorsys
 import zipfile
 import xml.etree.ElementTree as ET
@@ -774,7 +775,53 @@ def _update_slide_legend_tables(slide_xml, unique_defects, color_map):
 
     return ET.tostring(root, encoding='utf-8', xml_declaration=True)
 
-def _update_slide2_tables_and_texts(slide_xml, top_models_table, grand_tot, vn_tot, indo_tot, vh_qc, vh2_qc, jv_qc, jv2_qc, month_label):
+def _update_slide_header_title(slide_xml, header_title):
+    """
+    Update slide header title banner (e.g. 'Re-Inspection Report_July 2026')
+    to dynamic header_title (e.g. 'Re-Inspection Report_September 2026').
+    """
+    root = ET.fromstring(slide_xml)
+    modified = False
+
+    for sp in root.iter(f'{{{NS_P}}}sp'):
+        tx_nodes = sp.findall(f'.//{{{NS_A}}}t')
+        full_txt = ''.join([t.text for t in tx_nodes if t.text]).strip()
+
+        # Match header title banner
+        if 'Re-Inspection' in full_txt and ('Report_' in full_txt or 'Report' in full_txt) and ('Date' not in full_txt):
+            if tx_nodes:
+                tx_nodes[0].text = header_title
+                for t_rem in tx_nodes[1:]:
+                    t_rem.text = ""
+                modified = True
+
+    if modified:
+        return ET.tostring(root, encoding='utf-8', xml_declaration=True)
+    return slide_xml
+
+def _update_cover_slide(slide_xml, month_label):
+    """Update Slide 1 cover date badge dynamically."""
+    if not month_label:
+        month_label = datetime.date.today().strftime('%B %Y')
+
+    root = ET.fromstring(slide_xml)
+    modified = False
+
+    for sp in root.iter(f'{{{NS_P}}}sp'):
+        tx_nodes = sp.findall(f'.//{{{NS_A}}}t')
+        full_txt = ''.join([t.text for t in tx_nodes if t.text]).strip()
+        if 'Date:' in full_txt or full_txt.startswith('Date'):
+            if tx_nodes:
+                tx_nodes[0].text = f"Date: {month_label}"
+                for t_rem in tx_nodes[1:]:
+                    t_rem.text = ""
+                modified = True
+
+    if modified:
+        return ET.tostring(root, encoding='utf-8', xml_declaration=True)
+    return re.sub(rb'Date:\s*[A-Za-z]+\s*\d{4}', f'Date: {month_label}'.encode('utf-8'), slide_xml)
+
+def _update_slide2_tables_and_texts(slide_xml, top_models_table, grand_tot, vn_tot, indo_tot, vh_qc, vh2_qc, jv_qc, jv2_qc, header_title):
     """Update Slide 2 tables and dynamic inspection count badges."""
     root = ET.fromstring(slide_xml)
     
@@ -798,7 +845,7 @@ def _update_slide2_tables_and_texts(slide_xml, top_models_table, grand_tot, vn_t
                     t_elem2 = cells[1].find(f'.//{{{NS_A}}}t')
                     if t_elem2 is not None: t_elem2.text = f"{pct:.2%}".replace('.', ',')
 
-    # 2. Update Inspection Time Badges
+    # 2. Update Inspection Time Badges & Header Title
     for sp in root.iter(f'{{{NS_P}}}sp'):
         tx_nodes = sp.findall(f'.//{{{NS_A}}}t')
         full_txt = ''.join([t.text for t in tx_nodes if t.text]).strip()
@@ -828,9 +875,9 @@ def _update_slide2_tables_and_texts(slide_xml, top_models_table, grand_tot, vn_t
                 tx_nodes[0].text = new_val
                 for t_rem in tx_nodes[1:]: t_rem.text = ""
 
-        elif 'Re-Inspection' in full_txt and 'Report' in full_txt:
+        elif 'Re-Inspection' in full_txt and 'Report' in full_txt and 'Date' not in full_txt:
             if tx_nodes:
-                tx_nodes[0].text = f"Re-Inspection Report_{month_label}"
+                tx_nodes[0].text = header_title
                 for t_rem in tx_nodes[1:]: t_rem.text = ""
 
     return ET.tostring(root, encoding='utf-8', xml_declaration=True)
@@ -840,14 +887,18 @@ def _update_slide2_tables_and_texts(slide_xml, top_models_table, grand_tot, vn_t
 #  MAIN PRESENTATION EXPORT PIPELINE
 # ==============================================================================
 
-def export_reinspection_presentation(all_sites_data, template_pptx="RE-INS REPORT.APR.2026.pptx", output_pptx="RE-INS REPORT.pptx", month_label="July 2026", color_template_path="Color_Template.xlsx", log_fn=print):
+def export_reinspection_presentation(all_sites_data, template_pptx="RE-INS REPORT.APR.2026.pptx", output_pptx="RE-INS REPORT.pptx", month_label=None, title_format="Re-Inspection Report_{month_label}", color_template_path="Color_Template.xlsx", log_fn=print):
     """
     Generate fully functional executive PowerPoint report with exact layout, colors, and charts.
     """
     if not os.path.exists(template_pptx):
         raise FileNotFoundError(f"Template PowerPoint file not found: {template_pptx}")
 
-    log_fn(f"Generating PowerPoint Report from template: {template_pptx}")
+    if not month_label:
+        month_label = datetime.date.today().strftime('%B %Y')
+
+    header_title = title_format.format(month_label=month_label, Month_Year=month_label)
+    log_fn(f"Generating PowerPoint Report from template: {template_pptx} (Title: '{header_title}')")
     
     # Collect all unique defect names across all sites and stations
     all_defects = set()
@@ -898,11 +949,11 @@ def export_reinspection_presentation(all_sites_data, template_pptx="RE-INS REPOR
 
                 # --- Slide 1 (Cover) ---
                 if item.filename == 'ppt/slides/slide1.xml':
-                    content = re.sub(rb'Date:\s*[A-Za-z]+\s*\d{4}', f'Date: {month_label}'.encode('utf-8'), content)
+                    content = _update_cover_slide(content, month_label)
 
                 # --- Slide 2 (Summary Dashboard) ---
                 elif item.filename == 'ppt/slides/slide2.xml':
-                    content = _update_slide2_tables_and_texts(content, top_models_table, grand_tot, vn_tot, indo_tot, vh['qc_total_fail'], vh2['qc_total_fail'], jv['qc_total_fail'], jv2['qc_total_fail'], month_label)
+                    content = _update_slide2_tables_and_texts(content, top_models_table, grand_tot, vn_tot, indo_tot, vh['qc_total_fail'], vh2['qc_total_fail'], jv['qc_total_fail'], jv2['qc_total_fail'], header_title)
 
                 # --- Chart 1: INDO Doughnut (JV vs JV2) ---
                 elif item.filename == 'ppt/charts/chart1.xml':
@@ -1036,10 +1087,13 @@ def export_reinspection_presentation(all_sites_data, template_pptx="RE-INS REPOR
                 content = zin.read(item.filename)
                 if item.filename == 'ppt/slides/slide3.xml':
                     content = _update_slide_legend_tables(content, sorted(s3_all_unique), color_map)
-                    content = re.sub(rb'Re-Inspection\s*Report_[A-Za-z0-9\s]+', f'Re-Inspection Report_{month_label}'.encode('utf-8'), content)
+                    content = _update_slide_header_title(content, header_title)
                 elif item.filename == 'ppt/slides/slide4.xml':
                     content = _update_slide_legend_tables(content, sorted(s4_all_unique), color_map)
-                    content = re.sub(rb'Re-Inspection\s*Report_[A-Za-z0-9\s]+', f'Re-Inspection Report_{month_label}'.encode('utf-8'), content)
+                    content = _update_slide_header_title(content, header_title)
+                elif item.filename.startswith('ppt/slides/slide') and item.filename != 'ppt/slides/slide1.xml':
+                    # Apply dynamic header title to any other content slides
+                    content = _update_slide_header_title(content, header_title)
                 zout.writestr(item, content)
 
     # Save to destination file

@@ -989,16 +989,16 @@ def generate_recycle_workbook(re_dir, ftt_dir, hfpa_dir, output_file=None, month
     log_fn(f"✓ Recycle Report generated successfully: {os.path.abspath(output_file)}")
     return output_file
 
-def generate_presentation_report(re_dir, ftt_dir, hfpa_dir, template_pptx="RE-INS REPORT.APR.2026.pptx", output_pptx=None, month_label=None, color_template="Color_Template.xlsx", log_fn=print):
+def generate_presentation_report(re_dir, ftt_dir, hfpa_dir, template_pptx="RE-INS REPORT.APR.2026.pptx", output_pptx=None, month_label=None, title_format="Re-Inspection Report_{month_label}", color_template="Color_Template.xlsx", log_fn=print):
     """Generate the executive PowerPoint report with exact layout and colors."""
     if month_label is None:
         month_label = detect_reporting_period(re_dir)
     if output_pptx is None or output_pptx == "Re-Ins Report-June-2026.pptx":
         output_pptx = format_pptx_filename(month_label)
     all_sites_data = load_all_sites_data(re_dir, ftt_dir, hfpa_dir, log_fn)
-    return pptx_generator.export_reinspection_presentation(all_sites_data, template_pptx, output_pptx, month_label, color_template_path=color_template, log_fn=log_fn)
+    return pptx_generator.export_reinspection_presentation(all_sites_data, template_pptx, output_pptx, month_label, title_format=title_format, color_template_path=color_template, log_fn=log_fn)
 
-def generate_all_reports(re_dir, ftt_dir, hfpa_dir, db_output=None, recycle_output=None, pptx_output=None, template_pptx="RE-INS REPORT.APR.2026.pptx", color_template="Color_Template.xlsx", log_fn=print):
+def generate_all_reports(re_dir, ftt_dir, hfpa_dir, db_output=None, recycle_output=None, pptx_output=None, template_pptx="RE-INS REPORT.APR.2026.pptx", title_format="Re-Inspection Report_{month_label}", color_template="Color_Template.xlsx", log_fn=print):
     """Generate all workbooks and PowerPoint presentation."""
     period = detect_reporting_period(re_dir)
     if db_output is None or db_output == "Re-Inspection-Database.xlsx":
@@ -1010,7 +1010,7 @@ def generate_all_reports(re_dir, ftt_dir, hfpa_dir, db_output=None, recycle_outp
     generate_database_workbook(re_dir, ftt_dir, hfpa_dir, db_output, month_label=period, color_template=color_template, log_fn=log_fn)
     generate_recycle_workbook(re_dir, ftt_dir, hfpa_dir, recycle_output, month_label=period, log_fn=log_fn)
     if os.path.exists(template_pptx):
-        generate_presentation_report(re_dir, ftt_dir, hfpa_dir, template_pptx, pptx_output, month_label=period, color_template=color_template, log_fn=log_fn)
+        generate_presentation_report(re_dir, ftt_dir, hfpa_dir, template_pptx, pptx_output, month_label=period, title_format=title_format, color_template=color_template, log_fn=log_fn)
     log_fn(f"[OK] ALL reports generated successfully!\n  - Database: {db_output}\n  - Recycle: {recycle_output}\n  - Presentation: {pptx_output}")
 
 
