@@ -136,16 +136,17 @@ def sync_and_register_defects(defect_names=None, color_path="Color_Template.xlsx
         hex_val = ws1.cell(r, 8).value
         if d_val is not None and str(d_val).strip():
             d_name = str(d_val).strip().replace('\xa0', ' ')
+            rv = ws1.cell(r, 5).value
+            gv = ws1.cell(r, 6).value
+            bv = ws1.cell(r, 7).value
+            has_valid_rgb = all(isinstance(v, (int, float)) and 0 <= int(v) <= 255 for v in [rv, gv, bv] if v is not None) and all(v is not None for v in [rv, gv, bv])
+
             if hex_val is not None:
-                if isinstance(hex_val, int):
-                    clean_hex = f"{hex_val:06X}"
-                else:
-                    clean_hex = str(hex_val).strip().upper().replace('#', '').zfill(6)
+                clean_hex = str(hex_val).strip().upper().replace('#', '').zfill(6)
+            elif has_valid_rgb:
+                clean_hex = rgb_to_hex(int(rv), int(gv), int(bv))
             else:
-                rv = ws1.cell(r, 5).value or 128
-                gv = ws1.cell(r, 6).value or 128
-                bv = ws1.cell(r, 7).value or 128
-                clean_hex = rgb_to_hex(rv, gv, bv)
+                clean_hex = rgb_to_hex(rv or 128, gv or 128, bv or 128)
 
             rgb_t = hex_to_rgb(clean_hex)
             ws1.cell(r, 3, d_name)
@@ -262,7 +263,7 @@ def load_color_template(color_path="Color_Template.xlsx"):
                     hex_val = ws1.cell(r, 8).value
                     if dtype is not None and hex_val is not None:
                         clean_name = str(dtype).strip().replace('\xa0', ' ')
-                        clean_hex = f"{hex_val:06X}" if isinstance(hex_val, int) else str(hex_val).strip().upper().replace('#', '').zfill(6)
+                        clean_hex = str(hex_val).strip().upper().replace('#', '').zfill(6)
                         color_map[clean_name] = clean_hex
                         color_map[clean_name.lower()] = clean_hex
 
@@ -452,10 +453,54 @@ def _update_bar_chart_2series(xml_content, categories, values1, values2):
         if is_pct:
             _update_bar_chart_dLbls(ser, categories, values2)
 
+    # --- SAFE ZONE ENFORCEMENT ---
+    # Dynamically scale valAx max so the longest bar occupies at most 44-48% of the axis width,
+    # reserving the remaining 52%+ as a guaranteed clean safe zone for category names and percentages.
+    valAx = root.find(f'.//{{{NS_C}}}valAx')
+    if valAx is not None and values1:
+        valid_vals = [float(v) for v in values1 if v is not None and float(v) > 0]
+        if valid_vals:
+            max_val = max(valid_vals)
+            target_max = max_val * 2.22
+            if target_max <= 60:
+                scale_max = int(math.ceil(target_max / 10.0) * 10)
+                major_unit = max(10, scale_max // 4)
+            elif target_max <= 150:
+                scale_max = int(math.ceil(target_max / 25.0) * 25)
+                major_unit = 25
+            elif target_max <= 350:
+                scale_max = int(math.ceil(target_max / 50.0) * 50)
+                major_unit = 50
+            elif target_max <= 750:
+                scale_max = int(math.ceil(target_max / 100.0) * 100)
+                major_unit = 100
+            elif target_max <= 1500:
+                scale_max = int(math.ceil(target_max / 200.0) * 200)
+                major_unit = 200
+            else:
+                scale_max = int(math.ceil(target_max / 500.0) * 500)
+                major_unit = 500
+
+            scaling = valAx.find(f'{{{NS_C}}}scaling')
+            if scaling is not None:
+                max_el = scaling.find(f'{{{NS_C}}}max')
+                if max_el is not None:
+                    max_el.set('val', str(scale_max))
+                else:
+                    ET.SubElement(scaling, f'{{{NS_C}}}max', val=str(scale_max))
+            mu_el = valAx.find(f'{{{NS_C}}}majorUnit')
+            if mu_el is not None:
+                mu_el.set('val', str(major_unit))
+            else:
+                ET.SubElement(valAx, f'{{{NS_C}}}majorUnit', val=str(major_unit))
+
     return ET.tostring(root, encoding='utf-8', xml_declaration=True)
 
 def _update_pie3d_chart(xml_content, categories, values1, values2):
-    """Update a 3D Pie Chart with categories and Grand Total + Percentage series."""
+    """
+    Update a 3D Pie Chart with categories and Grand Total + Percentage series.
+    Enforces clean, high-contrast, non-overlapping typography without truncation.
+    """
     root = ET.fromstring(xml_content)
     pie = root.find(f'.//{{{NS_C}}}pie3DChart')
     if pie is None:
@@ -469,63 +514,48 @@ def _update_pie3d_chart(xml_content, categories, values1, values2):
         _update_cat_points(_find_cat_container(ser), categories)
         _update_val_points(_find_val_container(ser), vals, is_pct=is_pct)
 
-    # Sanitize data labels across all series in the pie chart
-    for ser in series_list:
-        dLbls = ser.find(f'{{{NS_C}}}dLbls')
-        if dLbls is None:
-            continue
+    # Clean and optimize data labels on primary series (ser[0])
+    if len(series_list) > 0:
+        ser0 = series_list[0]
+        dLbls0 = ser0.find(f'{{{NS_C}}}dLbls')
+        if dLbls0 is None:
+            dLbls0 = ET.SubElement(ser0, f'{{{NS_C}}}dLbls')
 
-        # Ensure global data labels display percentage (not raw count value)
-        show_val = dLbls.find(f'{{{NS_C}}}showVal')
-        if show_val is not None:
-            show_val.set('val', '0')
-        else:
-            ET.SubElement(dLbls, f'{{{NS_C}}}showVal', val='0')
+        # Wipe out any legacy overrides with small padding or ellipsis truncation
+        for child in list(dLbls0):
+            dLbls0.remove(child)
 
-        show_pct = dLbls.find(f'{{{NS_C}}}showPercent')
-        if show_pct is not None:
-            show_pct.set('val', '1')
-        else:
-            ET.SubElement(dLbls, f'{{{NS_C}}}showPercent', val='1')
+        # Build clean data label configuration
+        ET.SubElement(dLbls0, f'{{{NS_C}}}numFmt', formatCode='0.0%', sourceLinked='0')
+        ET.SubElement(dLbls0, f'{{{NS_C}}}dLblPos', val='bestFit')
+        ET.SubElement(dLbls0, f'{{{NS_C}}}showLegendKey', val='0')
+        ET.SubElement(dLbls0, f'{{{NS_C}}}showVal', val='0')
+        ET.SubElement(dLbls0, f'{{{NS_C}}}showCatName', val='0')
+        ET.SubElement(dLbls0, f'{{{NS_C}}}showSerName', val='0')
+        ET.SubElement(dLbls0, f'{{{NS_C}}}showPercent', val='1')
+        ET.SubElement(dLbls0, f'{{{NS_C}}}showBubbleSize', val='0')
+        ET.SubElement(dLbls0, f'{{{NS_C}}}showLeaderLines', val='1')
 
-        # Sanitize individual slice overrides
-        for dl in list(dLbls.findall(f'{{{NS_C}}}dLbl')):
-            idx_el = dl.find(f'{{{NS_C}}}idx')
-            if idx_el is None:
-                dLbls.remove(dl)
-                continue
-            try:
-                idx_val = int(idx_el.get('val', '-1'))
-            except ValueError:
-                idx_val = -1
+        # Charcoal bold text (sz=800, 8pt) with overflow enabled to eliminate '40...'
+        txPr = ET.SubElement(dLbls0, f'{{{NS_C}}}txPr')
+        ET.SubElement(txPr, f'{{{NS_A}}}bodyPr', rot='0', spcFirstLastPara='0', vertOverflow='overflow', horzOverflow='overflow', vert='horz', wrap='none', lIns='0', tIns='0', rIns='0', bIns='0', anchor='ctr', anchorCtr='1')
+        ET.SubElement(txPr, f'{{{NS_A}}}lstStyle')
+        p = ET.SubElement(txPr, f'{{{NS_A}}}p')
+        pPr = ET.SubElement(p, f'{{{NS_A}}}pPr')
+        defRPr = ET.SubElement(pPr, f'{{{NS_A}}}defRPr', lang='en-US', sz='800', b='1', i='0', u='none', strike='noStrike', kern='1200', baseline='0')
+        sf = ET.SubElement(defRPr, f'{{{NS_A}}}solidFill')
+        ET.SubElement(sf, f'{{{NS_A}}}srgbClr', val='1F2937')
+        ET.SubElement(p, f'{{{NS_A}}}endParaRPr', lang='en-US', sz='800', b='1')
 
-            if idx_val < 0 or idx_val >= len(categories):
-                dLbls.remove(dl)
-                continue
-
-            # Remove manual field/text overrides (e.g. <c:tx> with [VALUE])
-            tx = dl.find(f'{{{NS_C}}}tx')
-            if tx is not None:
-                dl.remove(tx)
-
-            # Ensure slice displays percentage and not value
-            dl_sv = dl.find(f'{{{NS_C}}}showVal')
-            if dl_sv is not None:
-                dl_sv.set('val', '0')
-            else:
-                ET.SubElement(dl, f'{{{NS_C}}}showVal', val='0')
-
-            dl_sp = dl.find(f'{{{NS_C}}}showPercent')
-            if dl_sp is not None:
-                dl_sp.set('val', '1')
-            else:
-                ET.SubElement(dl, f'{{{NS_C}}}showPercent', val='1')
-
-            # Ensure number format is percentage if specified
-            dl_nf = dl.find(f'{{{NS_C}}}numFmt')
-            if dl_nf is not None:
-                dl_nf.set('formatCode', '0.0%')
-                dl_nf.set('sourceLinked', '0')
+    # Delete data labels on secondary series (ser[1]) to prevent duplicate overlapping labels
+    if len(series_list) > 1:
+        ser1 = series_list[1]
+        dLbls1 = ser1.find(f'{{{NS_C}}}dLbls')
+        if dLbls1 is None:
+            dLbls1 = ET.SubElement(ser1, f'{{{NS_C}}}dLbls')
+        for child in list(dLbls1):
+            dLbls1.remove(child)
+        ET.SubElement(dLbls1, f'{{{NS_C}}}delete', val='1')
 
     return ET.tostring(root, encoding='utf-8', xml_declaration=True)
 
@@ -1103,12 +1133,21 @@ def export_reinspection_presentation(all_sites_data, template_pptx="RE-INS REPOR
     try:
         with open(output_pptx, 'wb') as f_out:
             f_out.write(zip_buffer2.getvalue())
+        target_saved = output_pptx
         log_fn(f"[OK] PowerPoint presentation generated successfully: {os.path.abspath(output_pptx)}")
-        return output_pptx
     except PermissionError:
         base, ext = os.path.splitext(output_pptx)
         alt_path = f"{base}_updated{ext}"
         with open(alt_path, 'wb') as f_out:
             f_out.write(zip_buffer2.getvalue())
+        target_saved = alt_path
         log_fn(f"[WARNING] {output_pptx} is locked by PowerPoint/WPS. Saved to {alt_path} instead.")
-        return alt_path
+
+    # Automatically apply visual inspection annotations (bounding frames, connector lines & insight callouts)
+    try:
+        import pptx_annotator
+        pptx_annotator.annotate_presentation(target_saved, all_sites_data=all_sites_data, log_fn=log_fn)
+    except Exception as e:
+        log_fn(f"[WARNING] Could not apply visual inspection annotations: {e}")
+
+    return target_saved
